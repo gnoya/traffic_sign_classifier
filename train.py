@@ -29,7 +29,7 @@ def run(number, image_size, model, learning_rate, epochs, milestones, gamma):
 
     params = {'batch_size': 3921,
             'shuffle': True,
-            'num_workers': 2}
+            'num_workers': 0}
 
     # Create Dataset
     training_set = TrafficSignDataset('./GTSRB/Final_Training/Images/', classes, image_size, False)
@@ -49,11 +49,12 @@ def run(number, image_size, model, learning_rate, epochs, milestones, gamma):
     validation_loader = DataLoader(dataset=validation_set, **params)
 
     loss_fn = torch.nn.CrossEntropyLoss(weight=class_weights)
-
-    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0)
+    # loss_fn = torch.nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0.0015)
     scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=milestones, gamma=gamma)
 
     for t in range(epochs):
+        model.train()
         train_f1 = []
         train_acc = []
         total_loss = []
@@ -84,6 +85,7 @@ def run(number, image_size, model, learning_rate, epochs, milestones, gamma):
 
         scheduler.step()
         with torch.no_grad():
+            model.eval()
             test_f1 = []
             test_acc = []
             for i, data in enumerate(validation_loader, 0):
@@ -106,7 +108,7 @@ def run(number, image_size, model, learning_rate, epochs, milestones, gamma):
         epoch_loss.append(total_loss)
         epoch_train_acc.append(train_f1)
         epoch_test_acc.append(test_f1)
-        print('Epoch {0}: Cost: {1:.4f} | Training F1: {2:.4f} | Training Acc: {3:.4f} | Testing F1: {4:.4f} | Testing Acc: {5:.4f} | Learning rate: {6:.4f}'.format(t, total_loss, train_f1, train_acc, test_f1, test_acc, lr))
+        print('Epoch {0}: Cost: {1:.4f} | Training F1: {2:.4f} | Testing F1: {3:.4f} | Learning rate: {4:.6f}'.format(t, total_loss, train_f1, test_f1, lr))
         # print('Epoch {0}: Cost: {1:.4f} | Training F1: {2:.4f} | Training Acc: {3:.4f} | Learning rate: {4:.4f}'.format(t, total_loss, train_f1, train_acc, lr))
 
 
@@ -117,18 +119,27 @@ if __name__ == '__main__':
 
         model = nn.Sequential(
             nn.Linear(image_size*image_size, 2*4096),
+            nn.Dropout(0.35),
+            nn.BatchNorm1d(num_features=2*4096),
             nn.ReLU(),
             nn.Linear(2*4096, 4096),
+            nn.Dropout(0.50),
+            nn.BatchNorm1d(num_features=4096),
+            nn.ReLU(),
+            nn.Linear(4096, 4096),
+            nn.Dropout(0.50),
+            nn.BatchNorm1d(num_features=4096),
             nn.ReLU(),
             nn.Linear(4096, classes)
         )
         model = model.to('cuda')
 
-        learning_rate = 0.005
+        learning_rate = 0.0008
         epochs = 250
-        milestones = [150, 200]
-        gamma = 0.33
-
+        milestones = [80, 130, 170, 190]
+        gamma = 0.8
         run(1, image_size, model, learning_rate, epochs, milestones, gamma)
+        # run(2, image_size, model, 0.0001, epochs, milestones, gamma)
+        # run(2, image_size, model, 0.005, epochs, [75, 125], 0.33)
     except KeyboardInterrupt:
         plot_data(epoch_loss, epoch_train_acc, epoch_test_acc)
